@@ -21,7 +21,7 @@ var slackChannel string
 func init() {
 	err := godotenv.Load("/go/bin/.env")
   if err != nil {
-    log.Fatal("Error loading .env file")
+    log.Println("No .env file found, falling back to environment variables")
   }
 
 	parisPoundUrl = os.Getenv("PARIS_POUND_URL")
@@ -29,6 +29,10 @@ func init() {
   noAlertString = os.Getenv("NO_ALERT_STRING")
   slackToken = os.Getenv("SLACK_TOKEN")
   slackChannel = os.Getenv("SLACK_CHANNEL")
+
+  if parisPoundUrl == "" || vehiclePlateNumber == "" || noAlertString == "" {
+    log.Fatal("Required environment variables are missing.")
+  }
 }
 
 func main() {
@@ -56,17 +60,17 @@ func main() {
         var isImpounded bool
 
         if (!IsNotifierValid(notifier)) {
-          fmt.Println("Please specify a notifier, invalid notifier specified")
+          log.Println("Please specify a notifier, invalid notifier specified")
           return nil
         }
 
         isImpounded = GetVehicleStatus()
         if (isImpounded) {
-          fmt.Println("Vehicle was impounded, sending notification")
+          log.Println("Vehicle was impounded, sending notification")
 
           Notify(notifier)
         } else {
-          fmt.Println("Vehicle not impounded, nothing do to.")
+          log.Println("Vehicle not impounded, nothing do to.")
         }
 
         return nil
@@ -77,9 +81,9 @@ func main() {
       Aliases: []string{"t"},
       Usage: "Test notifier settings",
       Action: func(c *cli.Context) error {
-        fmt.Println("Sending test message")
+        log.Println("Sending test message")
         if (!IsNotifierValid(notifier)) {
-          fmt.Println("Please specify a notifier, invalid notifier specified")
+          log.Println("Please specify a notifier, invalid notifier specified")
           return nil
         }
 
@@ -145,6 +149,9 @@ func IsNotifierValid(notifier string) bool {
 func Notify(notifier string) {
   switch notifier {
   case "slack":
+    if slackToken == "" || slackChannel == "" {
+      log.Fatal("Missing environment variables for notifier Slack.")
+    }
     message := GetNotificationMessage(GetPoundUrl(), vehiclePlateNumber)
     SendMessage(message)
   }
