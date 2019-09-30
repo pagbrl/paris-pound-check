@@ -64,7 +64,7 @@ func main() {
           return nil
         }
 
-        isImpounded = GetVehicleStatus()
+        isImpounded = IsVehicleImpounded()
         if (isImpounded) {
           log.Println("Vehicle was impounded, sending notification")
 
@@ -100,7 +100,7 @@ func main() {
 }
 
 
-func GetVehicleStatus() bool {
+func IsVehicleImpounded() bool {
 
   requestUrl := GetPoundUrl()
 
@@ -118,6 +118,12 @@ func GetVehicleStatus() bool {
 
 	if err != nil {
     log.Fatal(err)
+  }
+
+  // Check for maintenance mode (happens a lot)
+  if (strings.Contains(string(body), "maintenance")) {
+    log.Println("Pound website in maintenance mode, checking later.")
+    return false
   }
 
   if (strings.Contains(string(body), noAlertString)) {
