@@ -16,11 +16,13 @@ Then, running the script itself is a matter of populating environment variables 
 docker run --rm -v $(pwd)/.env:/go/bin/.env paris-pound-check:latest --notifier=slack check
 ```
 
+The official image built from this repository is also available on Docker hub image registry [https://cloud.docker.com/u/pauulog/repository/docker/pauulog/paris-pound-check](https://cloud.docker.com/u/pauulog/repository/docker/pauulog/paris-pound-check)
+
 ### Cron usage
 
 In the following example, the program will check every minute if the vehicle has been impounded.
 ```
-* * * * docker run --rm -v $(pwd)/.env:/go/bin/.env paris-pound-check:latest --notifier=slack check
+* * * * docker run --rm -v $(pwd)/.env:/go/bin/.env docker.io/pauulog/paris-pound-check:latest --notifier=slack check
 ```
 
 ## Available notifiers
