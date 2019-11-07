@@ -1,28 +1,32 @@
 package main
 
 import (
-	"io/ioutil"
 	"bytes"
-	"fmt"
-	"net/http"
-	"log"
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
 )
 
-type SlackMessage struct {
-	Text					string `json:"text"`
-	Channel 			string `json:"channel"`
-	Token					string `json:"token"`
+type SlackNotifier struct {
+	notify()
 }
 
-func GetDefaultSlackMessage() SlackMessage {
+type SlackMessage struct {
+	Text    string `json:"text"`
+	Channel string `json:"channel"`
+	Token   string `json:"token"`
+}
+
+func getDefaultSlackMessage() SlackMessage {
 	var slackMessage SlackMessage
 	slackMessage.Channel = slackChannel
 
 	return slackMessage
 }
 
-func GetNotificationMessage(detailsUrl string, vehiclePlateNumber string) SlackMessage {
+func getNotificationMessage(detailsUrl string, vehiclePlateNumber string) SlackMessage {
 	messageString := fmt.Sprintf(":warning: Alert, Your vehicle *%s* has just been impounded. Visit %s to get details :warning:", vehiclePlateNumber, detailsUrl)
 
 	slackMessage := GetDefaultSlackMessage()
@@ -31,7 +35,7 @@ func GetNotificationMessage(detailsUrl string, vehiclePlateNumber string) SlackM
 	return slackMessage
 }
 
-func SendMessage(message SlackMessage) []byte {
+func sendMessage(message SlackMessage) []byte {
 
 	message.Token = slackToken
 	jsonBody, err := json.Marshal(message)
@@ -42,7 +46,7 @@ func SendMessage(message SlackMessage) []byte {
 
 	slackUrl := fmt.Sprintf("%s/%s", "https://slack.com/api/", "chat.postMessage")
 
-	client := &http.Client {}
+	client := &http.Client{}
 	req, err := http.NewRequest("POST", slackUrl, bytes.NewBuffer(jsonBody))
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %v", slackToken))
 	req.Header.Add("Content-Type", "application/json")
