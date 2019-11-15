@@ -119,6 +119,7 @@ func IsVehicleImpounded() bool {
 	if err != nil {
     log.Fatal(err)
   }
+  log.Println(fmt.Sprintf("Visiting %v", GetPoundUrl()))
 
   // Check for maintenance mode (happens a lot)
   if (strings.Contains(string(body), "maintenance")) {
