@@ -19,12 +19,12 @@ type Environment struct {
 	NoAlertString      string `required:"true" envconfig:"NO_ALERT_STRING"`
 }
 
-type NotifierInterface interface {
+type Notifier interface {
 	notify() bool
 }
 
 func main() {
-	var notifierParameter string
+  var notifierParameter string
 
 	err := godotenv.Load("/go/bin/.env")
 	if err != nil {
@@ -60,11 +60,6 @@ func main() {
 				var isImpounded bool
 
 				notifer = getNotifier(notifierParameter)
-
-				if !isNotifierValid(notifier) {
-					log.Println("Please specify a notifier, invalid notifier specified")
-					return nil
-				}
 
 				isImpounded = isVehicleImpounded(e)
 				if isImpounded {
@@ -139,22 +134,15 @@ func getPoundUrl(e Environment) string {
 	return fmt.Sprintf("%v?immatriculation=%v&action_rechercher=", e.ParisPoundUrl, e.VehiclePlateNumber)
 }
 
-func isNotifierValid(notifier string) bool {
-	if notifier == "" {
-		return false
-	}
 
-	switch notifier {
-	case
-		"sms",
-		"slack":
-		return true
-	}
-	return false
-}
+func getNotifier(  string) (Notifier,error) {
 
-func getNotifier(notifierParameter string) NotifierInterface {
+  switch notifierParameter {
+  case "slack":
+    return makeSlackNotifier()
+  }
 
+  return
 }
 
 func notify(e Environment, notifier string) {

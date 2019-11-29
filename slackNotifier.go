@@ -9,14 +9,31 @@ import (
 	"net/http"
 )
 
+type SlackNotifierEnvironment struct {
+	SlackToken      string	`required:"true" envconfig:"SLACK_TOKEN"`
+	SlackChannel 	string	`required:"true" envconfig:"SLACK_CHANNEL"`
+}
+
 type SlackNotifier struct {
-	notify()
+	notify() bool
+	slackToken
+	slackChannel
 }
 
 type SlackMessage struct {
 	Text    string `json:"text"`
 	Channel string `json:"channel"`
 	Token   string `json:"token"`
+}
+
+
+func makeSlackNotifier(e SlackNotifierEnvironment) SlackNotifier {
+	err = envconfig.Process("poundcheck", &e)
+	if err != nil {
+		log.Fatalf("slackNotifier envconfig.Process: %w", err.error)
+	}
+
+	return SlackNotifier{slackToken: e.SlackToken, slackChannel: e.SlackChannel}
 }
 
 func getDefaultSlackMessage() SlackMessage {
