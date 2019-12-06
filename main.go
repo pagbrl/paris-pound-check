@@ -1,112 +1,102 @@
 package main
 
 import (
-  "fmt"
-  "log"
-  "os"
-  "strings"
-  "io/ioutil"
-  "net/http"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"strings"
 
-	"github.com/urfave/cli"
 	"github.com/joho/godotenv"
+	"github.com/kelseyhightower/envconfig"
+	"github.com/urfave/cli"
 )
 
-var parisPoundUrl string
-var vehiclePlateNumber string
-var noAlertString string
-var slackToken string
-var slackChannel string
+type Environment struct {
+	ParisPoundUrl      string `required:"true" envconfig:"PARIS_POUND_URL"`
+	VehiclePlateNumber string `required:"true" envconfig:"VEHICLE_PLATE_NUMBER"`
+	NoAlertString      string `required:"true" envconfig:"NO_ALERT_STRING"`
+}
 
-func init() {
-	err := godotenv.Load("/go/bin/.env")
-  if err != nil {
-    log.Println("No .env file found, falling back to environment variables")
-  }
-
-	parisPoundUrl = os.Getenv("PARIS_POUND_URL")
-  vehiclePlateNumber = os.Getenv("VEHICLE_PLATE_NUMBER")
-  noAlertString = os.Getenv("NO_ALERT_STRING")
-  slackToken = os.Getenv("SLACK_TOKEN")
-  slackChannel = os.Getenv("SLACK_CHANNEL")
-
-  if parisPoundUrl == "" || vehiclePlateNumber == "" || noAlertString == "" {
-    log.Fatal("Required environment variables are missing.")
-  }
+type Notifier interface {
+	Notify(detailsUrl string, vehiclePlateNumber string) bool
 }
 
 func main() {
-  var notifier string
+  	var notifierParameter string
 
-  app := cli.NewApp()
-  app.Name = "paris-pound-check"
-  app.Usage = "Check if you vehicle has been impounded"
+	err := godotenv.Load("/go/bin/.env")
+	if err != nil {
+		log.Println("No .env file found, falling back to environment variables")
+	}
 
-  app.Flags = []cli.Flag {
-    cli.StringFlag{
-      Name: "notifier, n",
-      Value: "none",
-      Usage: "Chose a notifier. Supported values : slack, sms",
-      Destination: &notifier,
-    },
-  }
+	var e Environment
+	err = envconfig.Process("poundcheck", &e)
+	if err != nil {
+		log.Fatalf("envconfig.Process: %w", err)
+	}
 
-	app.Commands = []cli.Command{
-    {
-      Name:    "check",
-      Aliases: []string{"c"},
-      Usage:   "check if vehicle has been impounded",
-      Action:  func(c *cli.Context) error {
-        var isImpounded bool
+	app := cli.NewApp()
+	app.Name = "paris-pound-check"
+	app.Usage = "Check if you vehicle has been impounded"
 
-        if (!IsNotifierValid(notifier)) {
-          log.Println("Please specify a notifier, invalid notifier specified")
-          return nil
-        }
+	app.Flags = []cli.Flag {
+		&cli.StringFlag{
+		  Name:        "notifier, n",
+		  Value:       "slack",
+		  Usage:       "Chose a notifier. Supported values : slack",
+		  Destination: &notifierParameter,
+		},
+	  }
 
-        isImpounded = IsVehicleImpounded()
-        if (isImpounded) {
-          log.Println("Vehicle was impounded, sending notification")
+	app.Commands = []*cli.Command{
+		{
+			Name:    "check",
+			Aliases: []string{"c"},
+			Usage:   "check if vehicle has been impounded",
+			Action: func(c *cli.Context) error {
+				var isImpounded bool
 
-          Notify(notifier)
-        } else {
-          log.Println("Vehicle not impounded, nothing do to.")
-        }
+				notifier := getNotifier(notifierParameter)
 
-        return nil
-      },
-    },
-    {
-      Name: "test",
-      Aliases: []string{"t"},
-      Usage: "Test notifier settings",
-      Action: func(c *cli.Context) error {
-        log.Println("Sending test message")
-        if (!IsNotifierValid(notifier)) {
-          log.Println("Please specify a notifier, invalid notifier specified")
-          return nil
-        }
+				poundUrl := getPoundUrl(e)
 
-        Notify(notifier)
-        return nil
-      },
-    },
-  }
+				isImpounded = isVehicleImpounded(poundUrl, e.NoAlertString)
+				if isImpounded {
+					log.Println("Vehicle was impounded, sending notification")
 
-	err := app.Run(os.Args)
-  if err != nil {
-    log.Fatal(err)
+					notifier.Notify(poundUrl, e.VehiclePlateNumber)
+				}
+				log.Println("Vehicle not impounded, nothing do to.")
+
+				return nil
+			},
+		},
+		{
+			Name:    "test",
+			Aliases: []string{"t"},
+			Usage:   "Test notifier settings",
+			Action: func(c *cli.Context) error {
+				log.Println("Sending test message")
+
+				notifier := getNotifier(notifierParameter)
+				notifier.Notify("test", "test")
+				return nil
+			},
+		},
+	}
+
+	err = app.Run(os.Args)
+	if err != nil {
+		log.Fatal(err)
 	}
 }
 
+func isVehicleImpounded(poundUrl string, noAlertString string) bool {
+	client := &http.Client{}
 
-func IsVehicleImpounded() bool {
-
-  requestUrl := GetPoundUrl()
-
-  client := &http.Client {}
-
-	req, err := http.NewRequest("GET", requestUrl, nil)
+	req, err := http.NewRequest("GET", poundUrl, nil)
 	res, err := client.Do(req)
 
 	if err != nil {
@@ -114,52 +104,37 @@ func IsVehicleImpounded() bool {
 	}
 
 	defer res.Body.Close()
-  body, err := ioutil.ReadAll(res.Body)
+	body, err := ioutil.ReadAll(res.Body)
 
 	if err != nil {
-    log.Fatal(err)
-  }
-  log.Println(fmt.Sprintf("Visiting %v", GetPoundUrl()))
+    	log.Fatal(err)
+  	}
+  	log.Println(fmt.Sprintf("Visiting %v", poundUrl))
 
-  // Check for maintenance mode (happens a lot)
-  if (strings.Contains(string(body), "maintenance")) {
-    log.Println("Pound website in maintenance mode, checking later.")
-    return false
-  }
+	// Check for maintenance mode (happens a lot)
+	if strings.Contains(string(body), "maintenance") {
+		log.Println("Pound website in maintenance mode, checking later.")
+		return false
+	}
 
-  if (strings.Contains(string(body), noAlertString)) {
-    return false
-  } else {
-    return true
-  }
+	if strings.Contains(string(body), noAlertString) {
+		return false
+	}
 
+	return true
 }
 
-func GetPoundUrl() string {
-  return fmt.Sprintf("%v?immatriculation=%v&action_rechercher=", parisPoundUrl, vehiclePlateNumber)
+func getPoundUrl(e Environment) string {
+	return fmt.Sprintf("%v?immatriculation=%v&action_rechercher=", e.ParisPoundUrl, e.VehiclePlateNumber)
 }
 
-func IsNotifierValid(notifier string) bool {
-  if (notifier == "") {
-    return false
-  }
 
-  switch notifier {
-    case
-        "sms",
-        "slack":
-        return true
-    }
-  return false
-}
+func getNotifier(notifierParameter string) (Notifier) {
 
-func Notify(notifier string) {
-  switch notifier {
+  switch notifierParameter {
   case "slack":
-    if slackToken == "" || slackChannel == "" {
-      log.Fatal("Missing environment variables for notifier Slack.")
-    }
-    message := GetNotificationMessage(GetPoundUrl(), vehiclePlateNumber)
-    SendMessage(message)
+    return makeSlackNotifier()
   }
+
+  return makeSlackNotifier()
 }
