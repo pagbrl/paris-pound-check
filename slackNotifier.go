@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+
+	"github.com/kelseyhightower/envconfig"
 )
 
 type SlackNotifierEnvironment struct {
@@ -15,9 +17,8 @@ type SlackNotifierEnvironment struct {
 }
 
 type SlackNotifier struct {
-	notify() bool
-	slackToken
-	slackChannel
+	SlackToken string
+	SlackChannel string
 }
 
 type SlackMessage struct {
@@ -26,46 +27,43 @@ type SlackMessage struct {
 	Token   string `json:"token"`
 }
 
-
-func makeSlackNotifier(e SlackNotifierEnvironment) SlackNotifier {
-	err = envconfig.Process("poundcheck", &e)
+func makeSlackNotifier() SlackNotifier {
+	var env SlackNotifierEnvironment
+	err := envconfig.Process("poundcheck", &env)
 	if err != nil {
-		log.Fatalf("slackNotifier envconfig.Process: %w", err.error)
+		log.Fatalf("slackNotifier envconfig.Process: %w", err)
 	}
 
-	return SlackNotifier{slackToken: e.SlackToken, slackChannel: e.SlackChannel}
+	return SlackNotifier{SlackToken: env.SlackToken, SlackChannel: env.SlackChannel}
 }
 
-func getDefaultSlackMessage() SlackMessage {
+func (notifier SlackNotifier) Notify(detailsUrl string, vehiclePlateNumber string) bool {
+	var slackMessage = notifier.GetNotificationMessage(detailsUrl, vehiclePlateNumber)
+	notifier.SendMessage(slackMessage)
+
+	return true
+}
+
+func (notifier SlackNotifier) GetNotificationMessage(detailsUrl string, vehiclePlateNumber string) SlackMessage {
 	var slackMessage SlackMessage
-	slackMessage.Channel = slackChannel
-
-	return slackMessage
-}
-
-func getNotificationMessage(detailsUrl string, vehiclePlateNumber string) SlackMessage {
 	messageString := fmt.Sprintf(":warning: Alert, Your vehicle *%s* has just been impounded. Visit %s to get details :warning:", vehiclePlateNumber, detailsUrl)
 
-	slackMessage := GetDefaultSlackMessage()
 	slackMessage.Text = messageString
+	slackMessage.Channel = notifier.SlackChannel
 
 	return slackMessage
 }
 
-func sendMessage(message SlackMessage) []byte {
-
-	message.Token = slackToken
+func (notifier SlackNotifier) SendMessage(message SlackMessage) []byte {
 	jsonBody, err := json.Marshal(message)
-
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	slackUrl := fmt.Sprintf("%s/%s", "https://slack.com/api/", "chat.postMessage")
-
 	client := &http.Client{}
 	req, err := http.NewRequest("POST", slackUrl, bytes.NewBuffer(jsonBody))
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %v", slackToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %v", notifier.SlackToken))
 	req.Header.Add("Content-Type", "application/json")
 
 	res, err := client.Do(req)
@@ -75,7 +73,6 @@ func sendMessage(message SlackMessage) []byte {
 
 	defer res.Body.Close()
 	body, err := ioutil.ReadAll(res.Body)
-
 	if err != nil {
 		log.Fatal(err)
 	}
